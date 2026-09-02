@@ -1,10 +1,9 @@
 -- ============================================================
--- MetricPulse KPI Queries
+-- MetricPulse Segment KPIs
 -- ============================================================
 
-
 -- ============================================================
--- 1. 7-Day Activation Rate
+-- 1. 7-Day Activation Rate by Platform
 -- ============================================================
 
 WITH user_activation AS (
@@ -12,6 +11,7 @@ WITH user_activation AS (
     SELECT
         u.user_id,
         u.signup_date,
+        u.platform,
 
         MIN(e.event_date) AS activation_date
 
@@ -23,34 +23,38 @@ WITH user_activation AS (
 
     GROUP BY
         u.user_id,
-        u.signup_date
+        u.signup_date,
+        u.platform
 ),
 
 activation_cohorts AS (
 
     SELECT
         signup_date,
+        platform,
 
         COUNT(*) AS new_users,
 
         COUNT(
             CASE
                 WHEN activation_date IS NOT NULL
-                 AND activation_date <= signup_date + INTERVAL '7 days'
+                AND activation_date <=
+                    signup_date + INTERVAL '7 days'
                 THEN 1
             END
         ) AS activated_users
 
     FROM user_activation
 
-    GROUP BY signup_date
+    GROUP BY
+        signup_date,
+        platform
 )
 
 SELECT
     signup_date,
-
+    platform,
     new_users,
-
     activated_users,
 
     ROUND(
@@ -66,10 +70,13 @@ WHERE signup_date <= (
     FROM events
 ) - INTERVAL '7 days'
 
-ORDER BY signup_date;
+ORDER BY
+    signup_date,
+    platform;
+
 
 -- ============================================================
--- 2. 14-Day Conversion Rate
+-- 2. 14-Day Conversion Rate by Region
 -- ============================================================
 
 WITH user_conversion AS (
@@ -77,6 +84,7 @@ WITH user_conversion AS (
     SELECT
         u.user_id,
         u.signup_date,
+        u.region,
 
         MIN(e.event_date) AS purchase_date
 
@@ -88,34 +96,38 @@ WITH user_conversion AS (
 
     GROUP BY
         u.user_id,
-        u.signup_date
+        u.signup_date,
+        u.region
 ),
 
 conversion_cohorts AS (
 
     SELECT
         signup_date,
+        region,
 
         COUNT(*) AS new_users,
 
         COUNT(
             CASE
                 WHEN purchase_date IS NOT NULL
-                 AND purchase_date <= signup_date + INTERVAL '14 days'
+                AND purchase_date <=
+                    signup_date + INTERVAL '14 days'
                 THEN 1
             END
         ) AS converted_users
 
     FROM user_conversion
 
-    GROUP BY signup_date
+    GROUP BY
+        signup_date,
+        region
 )
 
 SELECT
     signup_date,
-
+    region,
     new_users,
-
     converted_users,
 
     ROUND(
@@ -131,71 +143,78 @@ WHERE signup_date <= (
     FROM events
 ) - INTERVAL '14 days'
 
-ORDER BY signup_date;
-
+ORDER BY
+    signup_date,
+    region;
 
 -- ============================================================
--- 3. 7-Day Retention Rate
+-- 3. 14-Day Conversion Rate by Acquisition Channel
 -- ============================================================
 
-WITH user_retention AS (
+WITH user_conversion AS (
 
     SELECT
         u.user_id,
         u.signup_date,
+        u.acquisition_channel,
 
-        COUNT(e.event_id) AS login_count
+        MIN(e.event_date) AS purchase_date
 
     FROM users u
 
     LEFT JOIN events e
         ON u.user_id = e.user_id
-        AND e.event_type = 'login'
-        AND e.event_date > u.signup_date
-        AND e.event_date <= u.signup_date + INTERVAL '7 days'
+        AND e.event_type = 'purchase'
 
     GROUP BY
         u.user_id,
-        u.signup_date
+        u.signup_date,
+        u.acquisition_channel
 ),
 
-retention_cohorts AS (
+conversion_cohorts AS (
 
     SELECT
         signup_date,
+        acquisition_channel,
 
         COUNT(*) AS new_users,
 
         COUNT(
             CASE
-                WHEN login_count > 0
+                WHEN purchase_date IS NOT NULL
+                AND purchase_date <=
+                    signup_date + INTERVAL '14 days'
                 THEN 1
             END
-        ) AS retained_users
+        ) AS converted_users
 
-    FROM user_retention
+    FROM user_conversion
 
-    GROUP BY signup_date
+    GROUP BY
+        signup_date,
+        acquisition_channel
 )
 
 SELECT
     signup_date,
-
+    acquisition_channel,
     new_users,
-
-    retained_users,
+    converted_users,
 
     ROUND(
-        retained_users::NUMERIC
+        converted_users::NUMERIC
         / NULLIF(new_users, 0),
         4
-    ) AS retention_rate
+    ) AS conversion_rate
 
-FROM retention_cohorts
+FROM conversion_cohorts
 
 WHERE signup_date <= (
     SELECT MAX(event_date)::DATE
     FROM events
-) - INTERVAL '7 days'
+) - INTERVAL '14 days'
 
-ORDER BY signup_date;
+ORDER BY
+    signup_date,
+    acquisition_channel;

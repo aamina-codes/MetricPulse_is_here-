@@ -1,0 +1,19 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: metricpulse-postgres
+
+    environment:
+      POSTGRES_DB: metricpulse
+      POSTGRES_USER: metricpulse
+      POSTGRES_PASSWORD: metricpulse_dev
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - metricpulse_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  metricpulse_postgres_data:
